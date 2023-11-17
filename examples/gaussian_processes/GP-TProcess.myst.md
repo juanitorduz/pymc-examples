@@ -12,7 +12,7 @@ kernelspec:
 
 # Student-t Process
 
-PyMC3 also includes T-process priors.  They are a generalization of a Gaussian process prior to the multivariate Student's T distribution.  The usage is identical to that of `gp.Latent`, except they require a degrees of freedom parameter when they are specified in the model.  For more information, see chapter 9 of [Rasmussen+Williams](http://www.gaussianprocess.org/gpml/), and [Shah et al.](https://arxiv.org/abs/1402.4306).
+PyMC also includes T-process priors.  They are a generalization of a Gaussian process prior to the multivariate Student's T distribution.  The usage is identical to that of `gp.Latent`, except they require a degrees of freedom parameter when they are specified in the model.  For more information, see chapter 9 of [Rasmussen+Williams](http://www.gaussianprocess.org/gpml/), and [Shah et al.](https://arxiv.org/abs/1402.4306).
 
 Note that T processes aren't additive in the same way as GPs, so addition of `TP` objects are not supported.
 
@@ -23,18 +23,24 @@ Note that T processes aren't additive in the same way as GPs, so addition of `TP
 The following code draws samples from a T process prior with 3 degrees of freedom and a Gaussian process, both with the same covariance matrix.
 
 ```{code-cell} ipython3
+import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
-import pymc3 as pm
-import theano.tensor as tt
+import pymc as pm
+import pytensor.tensor as pt
 
-%matplotlib inline
+%config InlineBackend.figure_format = "retina"
 ```
 
 ```{code-cell} ipython3
-# set the seed
-np.random.seed(1)
+RANDOM_SEED = 1
 
+rng = np.random.default_rng(RANDOM_SEED)
+az.style.use("arviz-darkgrid")
+plt.rcParams["figure.figsize"] = (10, 4)
+```
+
+```{code-cell} ipython3
 n = 100  # The number of data points
 X = np.linspace(0, 10, n)[:, None]  # The inputs to the GP, they must be arranged as a column vector
 
@@ -48,7 +54,7 @@ mean_func = pm.gp.mean.Zero()
 
 # The latent function values are one sample from a multivariate normal
 # Note that we have to call `eval()` because PyMC3 built on top of Theano
-tp_samples = pm.MvStudentT.dist(mu=mean_func(X).eval(), cov=cov_func(X).eval(), nu=3).random(size=8)
+tp_samples = pm.draw(pm.MvStudentT.dist(mu=mean_func(X), cov=cov_func(X), nu=3), draws=8)
 
 ## Plot samples from TP prior
 fig = plt.figure(figsize=(12, 5))
@@ -59,7 +65,7 @@ ax.set_ylabel("y")
 ax.set_title("Samples from TP with DoF=3")
 
 
-gp_samples = pm.MvNormal.dist(mu=mean_func(X).eval(), cov=cov_func(X).eval()).random(size=8)
+gp_samples = pm.draw(pm.MvNormal.dist(mu=mean_func(X), cov=cov_func(X)), draws=8)
 fig = plt.figure(figsize=(12, 5))
 ax = fig.gca()
 ax.plot(X.flatten(), gp_samples.T, lw=3, alpha=0.6)
@@ -73,8 +79,6 @@ ax.set_title("Samples from GP");
 For the Poisson rate, we take the square of the function represented by the T process prior.
 
 ```{code-cell} ipython3
-np.random.seed(7)
-
 n = 150  # The number of data points
 X = np.linspace(0, 10, n)[:, None]  # The inputs to the GP, they must be arranged as a column vector
 
@@ -88,8 +92,8 @@ mean_func = pm.gp.mean.Zero()
 
 # The latent function values are one sample from a multivariate normal
 # Note that we have to call `eval()` because PyMC3 built on top of Theano
-f_true = pm.MvStudentT.dist(mu=mean_func(X).eval(), cov=cov_func(X).eval(), nu=3).random(size=1)
-y = np.random.poisson(f_true**2)
+f_true = pm.draw(pm.MvStudentT.dist(mu=mean_func(X), cov=cov_func(X), nu=3), draws=1)
+y = rng.poisson(f_true**2)
 
 fig = plt.figure(figsize=(12, 5))
 ax = fig.gca()
@@ -112,13 +116,13 @@ with pm.Model() as model:
     f = tp.prior("f", X=X)
 
     # adding a small constant seems to help with numerical stability here
-    y_ = pm.Poisson("y", mu=tt.square(f) + 1e-6, observed=y)
+    y_ = pm.Poisson("y", mu=pt.square(f) + 1e-6, observed=y)
 
     tr = pm.sample(1000)
 ```
 
 ```{code-cell} ipython3
-pm.traceplot(tr, var_names=["ℓ", "ν", "η"]);
+az.plot_trace(idata=tr, var_names=["ℓ", "ν", "η"]);
 ```
 
 ```{code-cell} ipython3
